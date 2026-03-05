@@ -1,6 +1,22 @@
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+
 app = FastAPI()
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 def read_root():
-    return {"Hello": "World"}
+    return """
+    <html>
+        <head>
+            <title>Блог о пельменях</title>
+        </head>
+        <body>
+            <h1>Секрет идеальных пельменей</h1>
+            <p>Поддерживайте соотношение мяса и жира — идеальные пельмени содержат достаточное количество жира, 
+            чтобы оставаться сочными после приготовления, поэтому не стоит полностью избавляться от всех 
+            кусочков жира на мясе.</p>
+            <p><b>Самая классическая пропорция мяса в фарше: 60% свинины и 40% курицы.</b> 
+            Так фарш получается сочным и нежным.</p>
+        </body>
+    </html>
+    """
