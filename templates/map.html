@@ -2,108 +2,146 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Воспоминания</title>
+    <title>Журнал Воспоминаний</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        #map { height: 70vh; width: 100%; border-radius: 1rem; }
+        #map { height: 100%; width: 100%; }
+        .sidebar { height: 100vh; overflow-y: auto; }
     </style>
 </head>
-<body class="bg-gray-100 p-6 font-sans">
-    <div class="max-w-5xl mx-auto">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-3xl font-bold text-gray-800">Карта воспоминаний Душанбе</h1>
-            <a href="/" class="text-blue-500 hover:underline">← На главную</a>
+<body class="bg-gray-100 font-sans overflow-hidden">
+
+    <div class="flex h-screen">
+        <div class="w-1/4 bg-white shadow-2xl z-10 sidebar flex flex-col">
+            <div class="p-6 border-b bg-gray-50">
+                <h1 class="text-2xl font-bold text-gray-800">Журнал</h1>
+                <a href="/" class="text-sm text-blue-500 hover:underline">← На главную</a>
+            </div>
+
+            <div id="journal-list" class="flex-1 p-4 space-y-4">
+                <p class="text-gray-400 text-center mt-10 text-sm">Воспоминаний пока нет...</p>
+            </div>
         </div>
 
-        <div id="map" class="shadow-lg border-2 border-gray-200"></div>
+        <div class="flex-1 relative">
+            <div id="map"></div>
+        </div>
     </div>
 
     <script>
-        // Инициализация карты (Координаты Душанбе)
+        // Инициализация карты
         var map = L.map('map').setView([38.5739, 68.7846], 14);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // Добавляем маркер Статуи Исмоили Сомони
-        var somoniMarker = L.marker([38.5737, 68.7863]).addTo(map);
-        somoniMarker.bindPopup("<b>Статуя Исмоили Сомони</b><br>Нажмите на карту рядом, чтобы добавить воспоминание!");
-
         let currentLat = null;
         let currentLng = null;
 
-        // Клик по любому месту на карте
-        map.on('click', function(e) {
+        // --- ФУНКЦИЯ ОБНОВЛЕНИЯ ЖУРНАЛА ---
+        async function refreshJournal() {
+            const response = await fetch('/api/get_all_memories');
+            const data = await response.json();
+            const list = document.getElementById('journal-list');
+
+            if (data.memories.length === 0) return;
+
+            list.innerHTML = ''; // Очищаем список
+            data.memories.forEach(mem => {
+                const card = document.createElement('div');
+                card.className = "p-4 bg-gray-50 rounded-xl border border-gray-200 cursor-pointer hover:bg-blue-50 transition shadow-sm";
+                // Обрезаем текст для журнала, если он слишком длинный
+                const shortText = mem.text.length > 50 ? mem.text.substring(0, 50) + '...' : mem.text;
+
+                card.innerHTML = `
+                    <p class="text-xs font-mono text-blue-400 mb-1">${mem.lat.toFixed(4)}, ${mem.lng.toFixed(4)}</p>
+                    <p class="text-sm text-gray-700 font-medium">${shortText}</p>
+                `;
+
+                // При клике на карточку — летим к координатам и открываем меню
+                card.onclick = () => goToLocation(mem.lat, mem.lng);
+                list.appendChild(card);
+            });
+        }
+
+        // --- ТЕЛЕПОРТАЦИЯ К МЕСТУ ---
+        function goToLocation(lat, lng) {
+            map.flyTo([lat, lng], 17); // Плавное перемещение
+            // Имитируем клик по карте, чтобы вызвать стандартное меню
+            setTimeout(() => {
+                openCustomPopup({latlng: L.latLng(lat, lng)});
+            }, 1000);
+        }
+
+        // --- ЛОГИКА ПОПАПА (КЛИК ПО КАРТЕ) ---
+        function openCustomPopup(e) {
             currentLat = e.latlng.lat;
             currentLng = e.latlng.lng;
 
             let popupContent = `
-                <div class="text-center p-2">
-                    <h3 class="font-bold mb-3">Что делаем?</h3>
-                    <button onclick="showAddForm()" class="block w-full bg-blue-500 text-white px-3 py-1 rounded mb-2 hover:bg-blue-600">Добавить воспоминание</button>
-                    <button onclick="showMemories()" class="block w-full bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">Посмотреть воспоминания</button>
+                <div class="text-center p-2 min-w-[150px]">
+                    <h3 class="font-bold mb-3 text-gray-800">Метка: ${currentLat.toFixed(3)}</h3>
+                    <button onclick="showAddForm()" class="block w-full bg-blue-500 text-white px-3 py-2 rounded-lg mb-2 hover:bg-blue-600 text-xs font-bold transition">➕ Добавить</button>
+                    <button onclick="showMemories()" class="block w-full bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 text-xs font-bold transition">👁 Посмотреть</button>
                     <div id="dynamic-content" class="mt-3 text-left"></div>
                 </div>
             `;
             L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
-        });
+        }
 
-        // Форма добавления
+        map.on('click', openCustomPopup);
+
+        // --- ДОБАВЛЕНИЕ И ПРОСМОТР (те же функции, что были раньше) ---
         function showAddForm() {
             document.getElementById('dynamic-content').innerHTML = `
                 <hr class="my-2">
                 <form id="memoryForm" onsubmit="submitMemory(event)">
-                    <textarea id="memText" placeholder="Было очень весело..." class="w-full border p-1 rounded mb-2 text-sm" required></textarea>
-                    <input type="file" id="memFile" accept="image/*" class="w-full text-sm mb-2" required>
-                    <button type="submit" class="bg-blue-700 text-white px-3 py-1 rounded w-full text-sm">Сохранить</button>
+                    <textarea id="memText" placeholder="Что здесь произошло?" class="w-full border p-2 rounded text-xs mb-2" required></textarea>
+                    <input type="file" id="memFile" accept="image/*" class="w-full text-[10px] mb-2" required>
+                    <button type="submit" class="bg-gray-800 text-white py-1 rounded w-full text-xs">Сохранить</button>
                 </form>
             `;
         }
 
-        // Отправка данных на сервер
         async function submitMemory(event) {
             event.preventDefault();
-            let text = document.getElementById('memText').value;
-            let file = document.getElementById('memFile').files[0];
-
             let formData = new FormData();
             formData.append("lat", currentLat);
             formData.append("lng", currentLng);
-            formData.append("text", text);
-            formData.append("file", file);
-
-            document.getElementById('dynamic-content').innerHTML = "<p class='text-sm text-gray-500'>Загрузка...</p>";
+            formData.append("text", document.getElementById('memText').value);
+            formData.append("file", document.getElementById('memFile').files[0]);
 
             await fetch('/api/add_memory', { method: 'POST', body: formData });
-            document.getElementById('dynamic-content').innerHTML = "<p class='text-sm text-green-600 font-bold'>Успешно сохранено!</p>";
+            map.closePopup();
+            refreshJournal(); // Сразу обновляем журнал слева!
         }
 
-        // Просмотр воспоминаний
         async function showMemories() {
-            document.getElementById('dynamic-content').innerHTML = "<p class='text-sm text-gray-500'>Ищем фото...</p>";
-
             let response = await fetch(`/api/get_memories?lat=${currentLat}&lng=${currentLng}`);
             let data = await response.json();
+            let content = document.getElementById('dynamic-content');
 
             if (data.memories.length === 0) {
-                document.getElementById('dynamic-content').innerHTML = "<p class='text-sm text-gray-500'>Здесь пока нет воспоминаний.</p>";
+                content.innerHTML = "<p class='text-xs text-gray-400 italic'>Здесь пусто...</p>";
                 return;
             }
 
-            let html = "<hr class='my-2'><div class='max-h-48 overflow-y-auto'>";
+            let html = "<hr class='my-2'><div class='max-h-40 overflow-y-auto space-y-2'>";
             data.memories.forEach(mem => {
-                html += `
-                    <div class="mb-3 border-b pb-2">
-                        <img src="${mem.image_path}" class="w-full rounded mb-1">
-                        <p class="text-sm italic">"${mem.text}"</p>
-                    </div>`;
+                html += `<div class="bg-gray-50 p-1 rounded border">
+                            <img src="${mem.image_path}" class="w-full rounded mb-1 shadow-sm">
+                            <p class="text-[11px] leading-tight">${mem.text}</p>
+                         </div>`;
             });
             html += "</div>";
-            document.getElementById('dynamic-content').innerHTML = html;
+            content.innerHTML = html;
         }
+
+        // Загружаем журнал при открытии страницы
+        refreshJournal();
     </script>
 </body>
 </html>

@@ -61,6 +61,17 @@ async def read_map(request: Request):
 
 
 # --- API ДЛЯ КАРТЫ (Сохранение и получение воспоминаний) ---
+# Добавь этот эндпоинт в main.py (например, перед @app.post("/api/add_memory"))
+
+@app.get("/api/get_all_memories")
+async def get_all_memories():
+    conn = sqlite3.connect("memories.db")
+    cursor = conn.cursor()
+    # Берем координаты и текст всех записей
+    cursor.execute("SELECT lat, lng, text FROM memories ORDER BY id DESC")
+    data = [{"lat": row[0], "lng": row[1], "text": row[2]} for row in cursor.fetchall()]
+    conn.close()
+    return {"memories": data}
 
 @app.post("/api/add_memory")
 async def add_memory(
